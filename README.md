@@ -172,7 +172,7 @@ bash setup.sh [--db-dir DIR] [--skip-envs] [--skip-dbs] [--with-phabox2]
 
 If you use phinder in your work, please cite the underlying tools:
 
-- **geNomad**: Camargo et al. (2023) *Nature Biotechnology*
-- **CheckV**: Nayfach et al. (2021) *Nature Biotechnology*
-- **Pharokka**: Bouras et al. (2023) *Bioinformatics*
-- **PhaBOX**: Shang et al. (2023) *Briefings in Bioinformatics*
+- **geNomad**: Camargo, A.P., Roux, S., Schulz, F. et al. Identification of mobile genetic elements with geNomad. Nat Biotechnol 42, 1303–1312 (2024). https://doi.org/10.1038/s41587-023-01953-y
+- **CheckV**: Nayfach, S., Camargo, A.P., Schulz, F. et al. CheckV assesses the quality and completeness of metagenome-assembled viral genomes. Nat Biotechnol 39, 578–585 (2021). https://doi.org/10.1038/s41587-020-00774-7
+- **Pharokka**: George Bouras, Roshan Nepal, Ghais Houtak, Alkis James Psaltis, Peter-John Wormald, Sarah Vreugde, Pharokka: a fast scalable bacteriophage annotation tool, Bioinformatics, Volume 39, Issue 1, January 2023, btac776, https://doi.org/10.1093/bioinformatics/btac776
+- **PhaBOX**: Shang, J., Peng, C., Guan, J., Cai, D., Wang, D., & Sun, Y. (2026). PhaBOX2: an enhanced web server for discovering and analyzing viral contigs in metagenomic data. Nucleic Acids Research, gkag382, https://doi.org/10.1093/nar/gkag382
