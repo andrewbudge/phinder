@@ -14,6 +14,8 @@
 set -euo pipefail
 
 # --- Defaults -----------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_DIR="$SCRIPT_DIR/envs"
 DB_DIR="$HOME/.phinder_dbs"
 SKIP_ENVS=false
 SKIP_DBS=false
@@ -57,40 +59,35 @@ echo ""
 if [ "$SKIP_ENVS" = false ]; then
     echo "--- conda environments ---"
 
+    # Build each env from its pinned yml — the same files the pipeline uses,
+    # so setup and run can never drift.
     if env_exists genomad_phinder; then
         echo "[envs] genomad_phinder already exists — skipping"
     else
-        echo "[envs] creating genomad_phinder (geNomad 1.11.2)"
-        conda create -y -n genomad_phinder -c bioconda -c conda-forge genomad=1.11.2
+        echo "[envs] creating genomad_phinder (from envs/genomad.yml)"
+        conda env create -n genomad_phinder -f "$ENV_DIR/genomad.yml"
     fi
 
     if env_exists checkv_phinder; then
         echo "[envs] checkv_phinder already exists — skipping"
     else
-        echo "[envs] creating checkv_phinder (CheckV 1.0.3)"
-        conda create -y -n checkv_phinder -c bioconda -c conda-forge checkv=1.0.3
+        echo "[envs] creating checkv_phinder (from envs/checkv.yml)"
+        conda env create -n checkv_phinder -f "$ENV_DIR/checkv.yml"
     fi
 
     if env_exists pharokka_phinder; then
         echo "[envs] pharokka_phinder already exists — skipping"
     else
-        echo "[envs] creating pharokka_phinder (Pharokka 1.8.2)"
-        conda create -y -n pharokka_phinder -c bioconda -c conda-forge pharokka=1.8.2
+        echo "[envs] creating pharokka_phinder (from envs/pharokka.yml)"
+        conda env create -n pharokka_phinder -f "$ENV_DIR/pharokka.yml"
     fi
 
     if [ "$WITH_PHABOX2" = true ]; then
         if env_exists phabox2_phinder; then
             echo "[envs] phabox2_phinder already exists — skipping"
         else
-            echo "[envs] creating phabox2_phinder (PhaBOX2 latest)"
-            conda create -y -n phabox2_phinder -c conda-forge -c bioconda phabox=2.1.13
-            conda run -n phabox2_phinder --no-capture-output conda install -y git
-            conda run -n phabox2_phinder --no-capture-output bash -c "
-                git clone https://github.com/KennthShang/PhaBOX.git /tmp/PhaBOX
-                pip install /tmp/PhaBOX
-                rm -rf /tmp/PhaBOX
-            "
-            echo "[envs] phabox2_phinder done"
+            echo "[envs] creating phabox2_phinder (from envs/phabox2.yml)"
+            conda env create -n phabox2_phinder -f "$ENV_DIR/phabox2.yml"
         fi
     fi
 
@@ -151,7 +148,7 @@ echo "=== setup complete ==="
 echo ""
 echo "Run phinder with:"
 echo ""
-echo "  nextflow run andrewcbudge/phinder \\"
+echo "  nextflow run andrewbudge/phinder \\"
 echo "      --input contigs.fasta \\"
 echo "      --genomad_db  ${DB_DIR}/genomad_db \\"
 echo "      --checkv_db   ${DB_DIR}/checkv_db \\"

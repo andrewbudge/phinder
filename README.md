@@ -23,7 +23,10 @@ contigs.fasta
 ## Requirements
 
 - [Nextflow](https://nextflow.io/) >= 23.04
-- [conda](https://docs.conda.io/) or [mamba](https://mamba.readthedocs.io/)
+- One of:
+  - [conda](https://docs.conda.io/) / [mamba](https://mamba.readthedocs.io/), or
+  - [Docker](https://www.docker.com/) (laptop/workstation), or
+  - [Singularity / Apptainer](https://apptainer.org/) (HPC)
 
 ---
 
@@ -32,7 +35,7 @@ contigs.fasta
 **1. Download and run setup**
 
 ```bash
-curl -O https://raw.githubusercontent.com/andrewcbudge/phinder/main/setup.sh
+curl -O https://raw.githubusercontent.com/andrewbudge/phinder/main/setup.sh
 bash setup.sh
 ```
 
@@ -48,7 +51,7 @@ bash setup.sh --with-phabox2
 **2. Run**
 
 ```bash
-nextflow run andrewcbudge/phinder \
+nextflow run andrewbudge/phinder \
     --input contigs.fasta \
     --genomad_db  ~/.phinder_dbs/genomad_db \
     --checkv_db   ~/.phinder_dbs/checkv_db \
@@ -115,9 +118,9 @@ results/
 | `--checkv_db` | required | Path to CheckV database |
 | `--pharokka_db` | required | Path to Pharokka database |
 | `--phabox_db` | required if `--phabox2_env` set | Path to PhaBOX database |
-| `--genomad_env` | builds from bioconda | Path to existing geNomad conda env |
-| `--checkv_env` | builds from bioconda | Path to existing CheckV conda env |
-| `--pharokka_env` | builds from bioconda | Path to existing Pharokka conda env |
+| `--genomad_env` | builds from `envs/genomad.yml` | Path to existing geNomad conda env |
+| `--checkv_env` | builds from `envs/checkv.yml` | Path to existing CheckV conda env |
+| `--pharokka_env` | builds from `envs/pharokka.yml` | Path to existing Pharokka conda env |
 | `--phabox2_env` | unset (PhaBOX skipped) | Path to existing phabox2 conda env |
 | `--min_provirus_score` | `0.9` | geNomad Provirus minimum virus_score |
 | `--checkv_quality_keep` | `High-quality,Complete` | Comma-separated CheckV quality tiers to keep |
@@ -145,12 +148,48 @@ results/
 
 ---
 
-## Running on HPC
+## Execution profiles
 
-Add `-profile slurm` to submit processes as SLURM jobs:
+Pick how tools are provisioned with `-profile`. Profiles are composable
+(comma-separated):
+
+| Profile | Tools provided by | Use when |
+|---------|-------------------|----------|
+| `conda` | conda envs built from `envs/*.yml` | local conda/mamba install |
+| `mamba` | same, resolved with mamba | faster conda solves |
+| `docker` | pinned biocontainer images | laptop / workstation |
+| `singularity` | same images, via Singularity | HPC without root |
+| `apptainer` | same images, via Apptainer | HPC without root |
+| `slurm` | (executor only) | submit processes as SLURM jobs |
+
+Containers pull pinned, frozen tool images — no conda solve, identical on every
+machine. The reference **databases are still downloaded separately** (via
+`setup.sh`) regardless of profile, and passed with the `--*_db` flags; Nextflow
+mounts them into the container automatically.
 
 ```bash
-nextflow run andrewcbudge/phinder ... -profile conda,slurm
+# Laptop, with Docker
+nextflow run andrewbudge/phinder --input contigs.fasta \
+    --genomad_db ... --checkv_db ... --pharokka_db ... \
+    -profile docker
+
+# HPC, Singularity images submitted as SLURM jobs
+nextflow run andrewbudge/phinder ... -profile singularity,slurm
+```
+
+> **PhaBOX** (optional) currently has no container image and runs via conda only.
+> Combine `-profile docker` with `--phabox2_env <env>` if you need it, or omit
+> PhaBOX under the container profiles.
+
+---
+
+## Running on HPC
+
+Add `-profile slurm` to submit processes as SLURM jobs (compose with a tool
+profile, e.g. `conda` or `singularity`):
+
+```bash
+nextflow run andrewbudge/phinder ... -profile singularity,slurm
 ```
 
 ---

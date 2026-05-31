@@ -1,0 +1,9 @@
+# Nextflow run artifacts
+.nextflow/
+.nextflow.log*
+work/
+results/
+
+# Editor / OS
+.DS_Store
+*.swp

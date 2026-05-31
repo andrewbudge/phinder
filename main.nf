@@ -14,7 +14,8 @@ nextflow.enable.dsl = 2
 // ============================================================================
 
 process GENOMAD {
-    conda params.genomad_env ?: 'bioconda::genomad'
+    conda params.genomad_env ?: "${projectDir}/envs/genomad.yml"
+    container 'quay.io/biocontainers/genomad:1.11.2--pyhdfd78af_0'
     publishDir "${params.outdir}/genomad", mode: 'copy'
 
     input:
@@ -31,10 +32,17 @@ process GENOMAD {
         -t ${task.cpus} --splits ${params.genomad_splits} \\
         ${contigs} output ${params.genomad_db}
     """
+
+    stub:
+    """
+    mkdir -p output/summary
+    touch output/summary/test_virus_summary.tsv output/summary/test_virus.fna
+    """
 }
 
 process FILTER_GENOMAD {
-    conda 'conda-forge::r-base conda-forge::r-tidyverse'
+    conda "${projectDir}/envs/rfilter.yml"
+    container 'rocker/tidyverse:4.3.3'
     publishDir "${params.outdir}/genomad", mode: 'copy'
 
     input:
@@ -50,10 +58,16 @@ process FILTER_GENOMAD {
         filtered_genomad.tsv \\
         ${params.min_provirus_score}
     """
+
+    stub:
+    """
+    touch filtered_genomad.tsv
+    """
 }
 
 process SUBSET_GENOMAD_FASTA {
-    conda 'bioconda::seqkit'
+    conda "${projectDir}/envs/seqkit.yml"
+    container 'quay.io/biocontainers/seqkit:2.8.2--h9ee0642_1'
 
     input:
     path filtered_tsv
@@ -67,10 +81,16 @@ process SUBSET_GENOMAD_FASTA {
     tail -n +2 ${filtered_tsv} | cut -f1 > ids.txt
     seqkit grep -n -f ids.txt ${virus_fna} > hq_viral_hits.fna
     """
+
+    stub:
+    """
+    touch hq_viral_hits.fna
+    """
 }
 
 process CHECKV {
-    conda params.checkv_env ?: 'bioconda::checkv'
+    conda params.checkv_env ?: "${projectDir}/envs/checkv.yml"
+    container 'quay.io/biocontainers/checkv:1.0.3--pyhdfd78af_0'
     publishDir "${params.outdir}/checkv", mode: 'copy'
 
     input:
@@ -89,10 +109,17 @@ process CHECKV {
         --remove_tmp \\
         -t ${task.cpus}
     """
+
+    stub:
+    """
+    mkdir -p output
+    touch output/quality_summary.tsv output/viruses.fna output/proviruses.fna
+    """
 }
 
 process FILTER_CHECKV {
-    conda 'conda-forge::r-base conda-forge::r-tidyverse'
+    conda "${projectDir}/envs/rfilter.yml"
+    container 'rocker/tidyverse:4.3.3'
     publishDir "${params.outdir}/checkv", mode: 'copy'
 
     input:
@@ -113,11 +140,19 @@ process FILTER_CHECKV {
         ${params.min_coverage} \\
         '${params.checkv_quality_keep}'
     """
+
+    stub:
+    """
+    touch potential_phage.tsv
+    """
 }
 
 process CLEAN_PROVIRUS_HEADERS {
     // CheckV renames trimmed proviruses with a `_1 start-end/total` suffix,
     // which breaks seqkit ID matching. Strip the suffix back to a stable form.
+    conda "${projectDir}/envs/seqkit.yml"
+    container 'quay.io/biocontainers/seqkit:2.8.2--h9ee0642_1'
+
     input:
     path proviruses
 
@@ -129,10 +164,16 @@ process CLEAN_PROVIRUS_HEADERS {
     sed 's/|provirus_\\([0-9]*\\)_\\([0-9]*\\)_[0-9]* .*/|provirus_\\1_\\2/' \\
         ${proviruses} > proviruses_clean.fna
     """
+
+    stub:
+    """
+    touch proviruses_clean.fna
+    """
 }
 
 process BUILD_CANDIDATES {
-    conda 'bioconda::seqkit'
+    conda "${projectDir}/envs/seqkit.yml"
+    container 'quay.io/biocontainers/seqkit:2.8.2--h9ee0642_1'
     publishDir "${params.outdir}/candidates", mode: 'copy'
 
     input:
@@ -165,10 +206,16 @@ process BUILD_CANDIDATES {
     # Normalize headers for downstream tools (| breaks some parsers).
     sed -i 's/|/_/g' candidate_phages.fna
     """
+
+    stub:
+    """
+    touch candidate_phages.fna
+    """
 }
 
 process PHAROKKA {
     conda params.pharokka_env ?: "${projectDir}/envs/pharokka.yml"
+    container 'quay.io/biocontainers/pharokka:1.8.2--pyhdfd78af_0'
     publishDir "${params.outdir}/pharokka", mode: 'copy'
 
     input:
@@ -190,10 +237,19 @@ process PHAROKKA {
         -g ${params.pharokka_gene_predictor} \\
         -f
     """
+
+    stub:
+    """
+    mkdir -p output
+    """
 }
 
+// NOTE: PhaBOX (optional, gated on --phabox2_env) has no `container` directive
+// yet — there is no biocontainer for the pinned 2.2 release. Under -profile
+// docker/singularity these steps would need an image; build one once a 2.2+
+// biocontainer is published (see envs/phabox2.yml). The conda path is unaffected.
 process PHABOX_END_TO_END {
-    conda params.phabox2_env
+    conda params.phabox2_env ?: "${projectDir}/envs/phabox2.yml"
     publishDir "${params.outdir}/phabox/end_to_end", mode: 'copy'
 
     input:
@@ -212,10 +268,15 @@ process PHABOX_END_TO_END {
         --threads ${task.cpus} \\
         ${skip_arg}
     """
+
+    stub:
+    """
+    mkdir -p output
+    """
 }
 
 process PHABOX_VOTU {
-    conda params.phabox2_env
+    conda params.phabox2_env ?: "${projectDir}/envs/phabox2.yml"
     publishDir "${params.outdir}/phabox/votu", mode: 'copy'
 
     input:
@@ -233,10 +294,15 @@ process PHABOX_VOTU {
         --threads ${task.cpus} \\
         --mode ${params.phabox_votu_mode}
     """
+
+    stub:
+    """
+    mkdir -p output
+    """
 }
 
 process PHABOX_TREE {
-    conda params.phabox2_env
+    conda params.phabox2_env ?: "${projectDir}/envs/phabox2.yml"
     publishDir "${params.outdir}/phabox/tree", mode: 'copy'
 
     input:
@@ -258,6 +324,11 @@ process PHABOX_TREE {
         --threads ${task.cpus} \\
         ${markers} \\
         --tree Y --msa Y
+    """
+
+    stub:
+    """
+    mkdir -p output
     """
 }
 
