@@ -35,7 +35,9 @@ jobs:
         with:
           version: ${{ env.NXF_VER }}
       - name: Stub run
-        run: nextflow run . -profile test -stub-run
+        # GitHub-hosted runners have 4 CPUs; cap threads so the cpus directive
+        # (default 8) doesn't exceed available cores.
+        run: nextflow run . -profile test -stub-run --threads 2
 
   docker:
     name: Containers pull & run (docker, stub)
@@ -51,8 +53,9 @@ jobs:
           version: ${{ env.NXF_VER }}
       - name: Stub run under docker
         # Pulls each pinned image and runs the stub inside it, proving the
-        # `container` directives are resolvable and runnable.
-        run: nextflow run . -profile test,docker -stub-run
+        # `container` directives are resolvable and runnable. --threads 2 fits
+        # the 4-CPU runner (cpus directive defaults to 8).
+        run: nextflow run . -profile test,docker -stub-run --threads 2
 
   conda:
     name: Conda envs solve (stub)
@@ -89,4 +92,5 @@ jobs:
         # genomad, checkv, pharokka, seqkit, rfilter. PhaBOX is not reached.
         env:
           NXF_CONDA_CACHEDIR: ~/.nextflow-conda-cache
-        run: nextflow run . -profile test,conda -stub-run
+        # --threads 2 fits the 4-CPU runner (cpus directive defaults to 8).
+        run: nextflow run . -profile test,conda -stub-run --threads 2
