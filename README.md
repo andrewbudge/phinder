@@ -136,11 +136,17 @@ results/
 │   └── candidate_phages.fna       candidate phage sequences
 ├── pharokka/
 │   └── output/                    per-contig annotation files
-└── phabox/                        (if --phabox2_env provided)
-    ├── end_to_end/                 taxonomy + lifestyle + host predictions
-    ├── votu/                       AAI-based vOTU clusters
-    └── tree/                       phylogenetic tree (terl + portal markers)
+├── phabox/                        (if --phabox2_env provided)
+│   ├── end_to_end/                 taxonomy + lifestyle + host predictions
+│   ├── votu/                       AAI-based vOTU clusters
+│   └── tree/                       phylogenetic tree (terl + portal markers)
+└── pipeline_info/
+    └── versions.yml               tool versions used in this run
 ```
+
+`pipeline_info/versions.yml` records the version of every tool the run
+invoked — pair it with the database `DB_MANIFEST.tsv` to fully describe a run
+when reporting results.
 
 ---
 

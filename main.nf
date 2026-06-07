@@ -25,18 +25,29 @@ process GENOMAD {
     path 'output/**/*_virus_summary.tsv', emit: summary
     path 'output/**/*_virus.fna',         emit: fasta
     path 'output'
+    path 'versions.yml',                  emit: versions
 
     script:
     """
     genomad end-to-end --cleanup \\
         -t ${task.cpus} --splits ${params.genomad_splits} \\
         ${contigs} output ${params.genomad_db}
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    genomad: \$(genomad --version | sed 's/geNomad, version //')
+END_VERSIONS
     """
 
     stub:
     """
     mkdir -p output/summary
     touch output/summary/test_virus_summary.tsv output/summary/test_virus.fna
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    genomad: 1.11.2
+END_VERSIONS
     """
 }
 
@@ -49,7 +60,8 @@ process FILTER_GENOMAD {
     path summary_tsv
 
     output:
-    path 'filtered_genomad.tsv'
+    path 'filtered_genomad.tsv', emit: tsv
+    path 'versions.yml',         emit: versions
 
     script:
     """
@@ -57,11 +69,23 @@ process FILTER_GENOMAD {
         ${summary_tsv} \\
         filtered_genomad.tsv \\
         ${params.min_provirus_score}
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    r-base: \$(Rscript -e 'cat(paste0(R.version\$major,".",R.version\$minor))')
+    r-tidyverse: \$(Rscript -e 'cat(as.character(packageVersion("tidyverse")))')
+END_VERSIONS
     """
 
     stub:
     """
     touch filtered_genomad.tsv
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    r-base: 4.3.3
+    r-tidyverse: 2.0.0
+END_VERSIONS
     """
 }
 
@@ -74,17 +98,28 @@ process SUBSET_GENOMAD_FASTA {
     path virus_fna
 
     output:
-    path 'hq_viral_hits.fna'
+    path 'hq_viral_hits.fna', emit: fasta
+    path 'versions.yml',      emit: versions
 
     script:
     """
     tail -n +2 ${filtered_tsv} | cut -f1 > ids.txt
     seqkit grep -n -f ids.txt ${virus_fna} > hq_viral_hits.fna
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    seqkit: \$(seqkit version | sed 's/seqkit v//')
+END_VERSIONS
     """
 
     stub:
     """
     touch hq_viral_hits.fna
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    seqkit: 2.8.2
+END_VERSIONS
     """
 }
 
@@ -101,6 +136,7 @@ process CHECKV {
     path 'output/viruses.fna',         emit: viruses
     path 'output/proviruses.fna',      emit: proviruses
     path 'output'
+    path 'versions.yml',               emit: versions
 
     script:
     """
@@ -108,12 +144,22 @@ process CHECKV {
         -d ${params.checkv_db} \\
         --remove_tmp \\
         -t ${task.cpus}
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    checkv: \$(python -c 'import checkv; print(checkv.__version__)')
+END_VERSIONS
     """
 
     stub:
     """
     mkdir -p output
     touch output/quality_summary.tsv output/viruses.fna output/proviruses.fna
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    checkv: 1.0.3
+END_VERSIONS
     """
 }
 
@@ -128,7 +174,8 @@ process FILTER_CHECKV {
     path input_contigs
 
     output:
-    path 'potential_phage.tsv'
+    path 'potential_phage.tsv', emit: tsv
+    path 'versions.yml',        emit: versions
 
     script:
     """
@@ -139,11 +186,23 @@ process FILTER_CHECKV {
         potential_phage.tsv \\
         ${params.min_coverage} \\
         '${params.checkv_quality_keep}'
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    r-base: \$(Rscript -e 'cat(paste0(R.version\$major,".",R.version\$minor))')
+    r-tidyverse: \$(Rscript -e 'cat(as.character(packageVersion("tidyverse")))')
+END_VERSIONS
     """
 
     stub:
     """
     touch potential_phage.tsv
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    r-base: 4.3.3
+    r-tidyverse: 2.0.0
+END_VERSIONS
     """
 }
 
@@ -157,17 +216,28 @@ process CLEAN_PROVIRUS_HEADERS {
     path proviruses
 
     output:
-    path 'proviruses_clean.fna'
+    path 'proviruses_clean.fna', emit: fasta
+    path 'versions.yml',         emit: versions
 
     script:
     """
     sed 's/|provirus_\\([0-9]*\\)_\\([0-9]*\\)_[0-9]* .*/|provirus_\\1_\\2/' \\
         ${proviruses} > proviruses_clean.fna
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    seqkit: \$(seqkit version | sed 's/seqkit v//')
+END_VERSIONS
     """
 
     stub:
     """
     touch proviruses_clean.fna
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    seqkit: 2.8.2
+END_VERSIONS
     """
 }
 
@@ -183,7 +253,8 @@ process BUILD_CANDIDATES {
     path genomad_fasta
 
     output:
-    path 'candidate_phages.fna'
+    path 'candidate_phages.fna', emit: fasta
+    path 'versions.yml',         emit: versions
 
     script:
     """
@@ -205,11 +276,21 @@ process BUILD_CANDIDATES {
 
     # Normalize headers for downstream tools (| breaks some parsers).
     sed -i 's/|/_/g' candidate_phages.fna
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    seqkit: \$(seqkit version | sed 's/seqkit v//')
+END_VERSIONS
     """
 
     stub:
     """
     touch candidate_phages.fna
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    seqkit: 2.8.2
+END_VERSIONS
     """
 }
 
@@ -223,6 +304,7 @@ process PHAROKKA {
 
     output:
     path 'output'
+    path 'versions.yml', emit: versions
 
     script:
     """
@@ -236,11 +318,21 @@ process PHAROKKA {
         --meta_hmm \\
         -g ${params.pharokka_gene_predictor} \\
         -f
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    pharokka: \$(pharokka.py --version 2>&1 | sed 's/.*pharokka //I; s/^v//')
+END_VERSIONS
     """
 
     stub:
     """
     mkdir -p output
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    pharokka: 1.8.2
+END_VERSIONS
     """
 }
 
@@ -257,6 +349,7 @@ process PHABOX_END_TO_END {
 
     output:
     path 'output'
+    path 'versions.yml', emit: versions
 
     script:
     def skip_arg = params.phabox_skip_phamer ? '--skip Y' : ''
@@ -267,11 +360,21 @@ process PHABOX_END_TO_END {
         --contigs ${candidates} \\
         --threads ${task.cpus} \\
         ${skip_arg}
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    phabox2: \$(python -c "import importlib.metadata as m; print(m.version('phabox2'))")
+END_VERSIONS
     """
 
     stub:
     """
     mkdir -p output
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    phabox2: 2.2
+END_VERSIONS
     """
 }
 
@@ -284,6 +387,7 @@ process PHABOX_VOTU {
 
     output:
     path 'output'
+    path 'versions.yml', emit: versions
 
     script:
     """
@@ -293,11 +397,21 @@ process PHABOX_VOTU {
         --contigs ${candidates} \\
         --threads ${task.cpus} \\
         --mode ${params.phabox_votu_mode}
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    phabox2: \$(python -c "import importlib.metadata as m; print(m.version('phabox2'))")
+END_VERSIONS
     """
 
     stub:
     """
     mkdir -p output
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    phabox2: 2.2
+END_VERSIONS
     """
 }
 
@@ -310,6 +424,7 @@ process PHABOX_TREE {
 
     output:
     path 'output'
+    path 'versions.yml', emit: versions
 
     script:
     def markers = params.phabox_tree_markers
@@ -324,11 +439,21 @@ process PHABOX_TREE {
         --threads ${task.cpus} \\
         ${markers} \\
         --tree Y --msa Y
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    phabox2: \$(python -c "import importlib.metadata as m; print(m.version('phabox2'))")
+END_VERSIONS
     """
 
     stub:
     """
     mkdir -p output
+
+    cat > versions.yml <<END_VERSIONS
+"${task.process}":
+    phabox2: 2.2
+END_VERSIONS
     """
 }
 
@@ -346,31 +471,43 @@ workflow {
 
     contigs_ch = Channel.fromPath(params.input, checkIfExists: true)
 
+    // Tool versions accumulate here, one small versions.yml per process.
+    ch_versions = Channel.empty()
+
     // --- geNomad classification + R filter ---------------------------------
     GENOMAD(contigs_ch)
     FILTER_GENOMAD(GENOMAD.out.summary)
-    SUBSET_GENOMAD_FASTA(FILTER_GENOMAD.out, GENOMAD.out.fasta)
+    SUBSET_GENOMAD_FASTA(FILTER_GENOMAD.out.tsv, GENOMAD.out.fasta)
+    ch_versions = ch_versions.mix(GENOMAD.out.versions, FILTER_GENOMAD.out.versions, SUBSET_GENOMAD_FASTA.out.versions)
 
     // --- CheckV completeness + R filter ------------------------------------
-    CHECKV(SUBSET_GENOMAD_FASTA.out)
-    FILTER_CHECKV(FILTER_GENOMAD.out, CHECKV.out.summary, contigs_ch)
+    CHECKV(SUBSET_GENOMAD_FASTA.out.fasta)
+    FILTER_CHECKV(FILTER_GENOMAD.out.tsv, CHECKV.out.summary, contigs_ch)
+    ch_versions = ch_versions.mix(CHECKV.out.versions, FILTER_CHECKV.out.versions)
 
     // --- Build the candidate FASTA -----------------------------------------
     CLEAN_PROVIRUS_HEADERS(CHECKV.out.proviruses)
     BUILD_CANDIDATES(
-        FILTER_CHECKV.out,
+        FILTER_CHECKV.out.tsv,
         CHECKV.out.viruses,
-        CLEAN_PROVIRUS_HEADERS.out,
+        CLEAN_PROVIRUS_HEADERS.out.fasta,
         GENOMAD.out.fasta
     )
+    ch_versions = ch_versions.mix(CLEAN_PROVIRUS_HEADERS.out.versions, BUILD_CANDIDATES.out.versions)
 
     // --- Annotation --------------------------------------------------------
-    PHAROKKA(BUILD_CANDIDATES.out)
+    PHAROKKA(BUILD_CANDIDATES.out.fasta)
+    ch_versions = ch_versions.mix(PHAROKKA.out.versions)
 
     // --- Classification (optional — requires --phabox2_env) ----------------
     if (params.phabox2_env) {
-        PHABOX_END_TO_END(BUILD_CANDIDATES.out)
-        PHABOX_VOTU(BUILD_CANDIDATES.out)
-        PHABOX_TREE(BUILD_CANDIDATES.out)
+        PHABOX_END_TO_END(BUILD_CANDIDATES.out.fasta)
+        PHABOX_VOTU(BUILD_CANDIDATES.out.fasta)
+        PHABOX_TREE(BUILD_CANDIDATES.out.fasta)
+        ch_versions = ch_versions.mix(PHABOX_END_TO_END.out.versions, PHABOX_VOTU.out.versions, PHABOX_TREE.out.versions)
     }
+
+    // --- Provenance: one combined versions.yml for the run -----------------
+    ch_versions
+        .collectFile(name: 'versions.yml', storeDir: "${params.outdir}/pipeline_info", sort: true)
 }
