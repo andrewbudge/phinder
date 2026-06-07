@@ -1,5 +1,7 @@
 # phinder
 
+[![CI](https://github.com/andrewbudge/phinder/actions/workflows/ci.yml/badge.svg)](https://github.com/andrewbudge/phinder/actions/workflows/ci.yml)
+
 A Nextflow pipeline for phage discovery from metagenomic assemblies.
 
 Takes a combined contig FASTA and runs viral identification, quality assessment,
@@ -32,23 +34,34 @@ contigs.fasta
 
 ## Quick start
 
-**1. Download and run setup**
+phinder needs two things: the reference **databases** (downloaded once) and a way
+to **provision the tools** (a `-profile` — containers or conda).
+
+**1. Download the databases**
 
 ```bash
 curl -O https://raw.githubusercontent.com/andrewbudge/phinder/main/setup.sh
-bash setup.sh
+bash setup.sh --skip-envs        # databases only → ~/.phinder_dbs
 ```
 
-This creates pinned conda environments (`genomad_phinder`, `checkv_phinder`,
-`pharokka_phinder`) and downloads all required databases to `~/.phinder_dbs`.
-The exact run command is printed at the end.
-
-To also set up PhaBOX (optional):
-```bash
-bash setup.sh --with-phabox2
-```
+Drop `--skip-envs` to *also* build pinned conda environments (`genomad_phinder`,
+`checkv_phinder`, `pharokka_phinder`) — only needed for the conda profile below.
+Add `--with-phabox2` to set up the optional PhaBOX step.
 
 **2. Run**
+
+With **Docker** — pinned images, nothing to build (recommended):
+
+```bash
+nextflow run andrewbudge/phinder \
+    --input contigs.fasta \
+    --genomad_db  ~/.phinder_dbs/genomad_db \
+    --checkv_db   ~/.phinder_dbs/checkv_db \
+    --pharokka_db ~/.phinder_dbs/pharokka_db \
+    -profile docker
+```
+
+With **conda** — uses the envs built by `setup.sh` (run it without `--skip-envs`):
 
 ```bash
 nextflow run andrewbudge/phinder \
@@ -62,7 +75,31 @@ nextflow run andrewbudge/phinder \
     -profile conda
 ```
 
-Use `-resume` on reruns to skip completed steps.
+Use `-resume` on reruns to skip completed steps. For HPC / Singularity / Apptainer,
+see [Execution profiles](#execution-profiles).
+
+---
+
+## Verify your install
+
+Before running on real data, confirm Nextflow and your tool profile are wired up
+correctly — **no databases required**. This runs the whole pipeline on a tiny
+bundled dataset in *stub* mode, where every step emits placeholder outputs in
+seconds:
+
+```bash
+nextflow run andrewbudge/phinder -profile test -stub-run
+```
+
+A `[SUCCESS]` line with all 8 processes completed means your setup is good. To
+also check that your engine pulls images / builds envs, add it to the profile:
+
+```bash
+nextflow run andrewbudge/phinder -profile test,docker -stub-run   # or test,conda
+```
+
+This is the same check phinder's [CI](https://github.com/andrewbudge/phinder/actions/workflows/ci.yml)
+runs on every change.
 
 ---
 
