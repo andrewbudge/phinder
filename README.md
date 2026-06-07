@@ -242,6 +242,29 @@ bash setup.sh [--db-dir DIR] [--skip-envs] [--skip-dbs] [--with-phabox2]
   --with-phabox2    Also install the phabox2 conda environment
 ```
 
+### Database provenance
+
+phinder does not pin database versions — it orchestrates the underlying tools
+and lets each one fetch its current database. That keeps you on the versions the
+tool authors recommend, which is what most analyses want. If you need a specific
+version instead, download it yourself and point the matching `--*_db` flag at it.
+
+So that a run can still be described after the fact, `setup.sh` writes a
+`DB_MANIFEST.tsv` into the database directory recording each database's version,
+the tool version that fetched it, its source, and the date:
+
+```
+database  db_version  tool_version  source                     recorded_utc
+genomad   1.9         1.11.2        genomad download-database  2026-06-07T22:23:38Z
+checkv    1.5         1.0.3         checkv download_database   2026-06-07T22:23:38Z
+pharokka  1.8.0       1.8.2         install_databases.py       2026-06-07T22:23:38Z
+phabox    2.2         2.2           github.com/.../phabox_db_v2_2.zip  2026-06-07T22:23:38Z
+```
+
+Re-running `setup.sh` refreshes the entries for whatever databases are present,
+so the manifest always reflects what is on disk. Include it when reporting
+results or filing issues.
+
 ---
 
 ## Citation

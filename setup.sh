@@ -21,6 +21,12 @@ SKIP_ENVS=false
 SKIP_DBS=false
 WITH_PHABOX2=false
 
+# PhaBOX DB is the one database we fetch by pinned URL (its tool has no downloader).
+# Single source of truth for both the download and the provenance record.
+PHABOX_DB_VER="2.2"
+PHABOX_DB_DIR="phabox_db_v2_2"
+PHABOX_DB_URL="https://github.com/KennthShang/PhaBOX/releases/download/v2/${PHABOX_DB_DIR}.zip"
+
 # --- Argument parsing ---------------------------------------------------------
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -35,10 +41,61 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+MANIFEST="$DB_DIR/DB_MANIFEST.tsv"
+
 # --- Helpers ------------------------------------------------------------------
 env_exists() { conda env list | grep -q "^${1} "; }
 
 db_exists()  { [ -d "$1" ] && [ "$(ls -A "$1")" ]; }
+
+# --- Provenance ---------------------------------------------------------------
+# phinder doesn't pin DB versions — it records what each tool's downloader gave
+# us, so a run can be described after the fact. Versions are read off disk, so
+# the manifest reflects ground truth (fresh download or pre-existing install).
+
+detect_genomad_ver() {
+    if [ -f "$1/version.txt" ]; then tr -d '[:space:]' < "$1/version.txt"; else printf -- '-'; fi
+}
+detect_checkv_ver() {  # version lives in the checkv-db-v* subdir name
+    local d
+    d="$(find "$1" -maxdepth 1 -type d -name 'checkv-db-v*' -print -quit 2>/dev/null)" || true
+    if [ -n "$d" ]; then basename "$d" | sed 's/^checkv-db-v//'; else printf -- '-'; fi
+}
+detect_pharokka_ver() {  # version lives in a VERSION_x_y_z marker filename
+    local f
+    f="$(find "$1" -maxdepth 1 -name 'VERSION_*' -print -quit 2>/dev/null)" || true
+    if [ -n "$f" ]; then basename "$f" | sed 's/^VERSION_//; s/_/./g'; else printf -- '-'; fi
+}
+
+# tool version of the conda env that fetched a DB ("-" if that env isn't present)
+tool_version() {  # $1 env, $2 pkg
+    local v
+    v="$(conda list -n "$1" "$2" 2>/dev/null | awk -v p="$2" '$1==p{x=$2} END{print x}')" || true
+    printf '%s' "${v:--}"
+}
+
+init_manifest() {
+    [ -f "$MANIFEST" ] && return
+    mkdir -p "$DB_DIR"
+    {
+        echo "# phinder database manifest — records which databases this install fetched."
+        echo "# phinder does not pin DB versions: it orchestrates tools and records what"
+        echo "# their downloaders provided. To use a specific version, point the matching"
+        echo "# --<tool>_db parameter at it. See the README \"Database provenance\" section."
+        printf 'database\tdb_version\ttool_version\tsource\trecorded_utc\n'
+    } > "$MANIFEST"
+}
+
+manifest_upsert() {  # $1 name, $2 db_version, $3 tool_version, $4 source
+    init_manifest
+    local now tmp
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    tmp="$(mktemp)"
+    # keep comments, the header, and every other DB's row; replace this DB's row
+    awk -F'\t' -v n="$1" '/^#/ || $1=="database" || $1!=n' "$MANIFEST" > "$tmp"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$1" "${2:--}" "${3:--}" "$4" "$now" >> "$tmp"
+    mv "$tmp" "$MANIFEST"
+}
 
 # Detect downloader
 if command -v curl &>/dev/null; then
@@ -127,16 +184,36 @@ if [ "$SKIP_DBS" = false ]; then
     fi
 
     # PhaBOX
-    if db_exists "$DB_DIR/phabox_db_v2_2"; then
-        echo "[dbs] phabox_db_v2_2 already exists — skipping"
+    if db_exists "$DB_DIR/$PHABOX_DB_DIR"; then
+        echo "[dbs] $PHABOX_DB_DIR already exists — skipping"
     else
         echo "[dbs] downloading PhaBOX database"
         cd "$DB_DIR"
-        download https://github.com/KennthShang/PhaBOX/releases/download/v2/phabox_db_v2_2.zip
-        unzip -q phabox_db_v2_2.zip
-        rm phabox_db_v2_2.zip
+        download "$PHABOX_DB_URL"
+        unzip -q "${PHABOX_DB_DIR}.zip"
+        rm "${PHABOX_DB_DIR}.zip"
         cd - > /dev/null
     fi
+
+    # --- Provenance manifest --------------------------------------------------
+    # Record whatever landed on disk (freshly downloaded or pre-existing).
+    if db_exists "$DB_DIR/genomad_db"; then
+        manifest_upsert genomad  "$(detect_genomad_ver "$DB_DIR/genomad_db")" \
+            "$(tool_version genomad_phinder genomad)"  "genomad download-database"
+    fi
+    if db_exists "$DB_DIR/checkv_db"; then
+        manifest_upsert checkv   "$(detect_checkv_ver "$DB_DIR/checkv_db")" \
+            "$(tool_version checkv_phinder checkv)"    "checkv download_database"
+    fi
+    if db_exists "$DB_DIR/pharokka_db"; then
+        manifest_upsert pharokka "$(detect_pharokka_ver "$DB_DIR/pharokka_db")" \
+            "$(tool_version pharokka_phinder pharokka)" "install_databases.py"
+    fi
+    if db_exists "$DB_DIR/$PHABOX_DB_DIR"; then
+        manifest_upsert phabox   "$PHABOX_DB_VER" \
+            "$(tool_version phabox2_phinder phabox2)"  "$PHABOX_DB_URL"
+    fi
+    echo "[dbs] provenance written to $MANIFEST"
 
     echo ""
 fi
@@ -146,6 +223,10 @@ CONDA_BASE=$(conda info --base)
 
 echo "=== setup complete ==="
 echo ""
+if [ -f "$MANIFEST" ]; then
+    echo "Databases recorded in: $MANIFEST"
+    echo ""
+fi
 echo "Run phinder with:"
 echo ""
 echo "  nextflow run andrewbudge/phinder \\"
