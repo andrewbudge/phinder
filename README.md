@@ -1,5 +1,7 @@
 # phinder
 
+[![CI](https://github.com/andrewbudge/phinder/actions/workflows/ci.yml/badge.svg)](https://github.com/andrewbudge/phinder/actions/workflows/ci.yml)
+
 A Nextflow pipeline for phage discovery from metagenomic assemblies.
 
 Takes a combined contig FASTA and runs viral identification, quality assessment,
@@ -23,32 +25,46 @@ contigs.fasta
 ## Requirements
 
 - [Nextflow](https://nextflow.io/) >= 23.04
-- [conda](https://docs.conda.io/) or [mamba](https://mamba.readthedocs.io/)
+- One of:
+  - [conda](https://docs.conda.io/) / [mamba](https://mamba.readthedocs.io/), or
+  - [Docker](https://www.docker.com/) (laptop/workstation), or
+  - [Singularity / Apptainer](https://apptainer.org/) (HPC)
 
 ---
 
 ## Quick start
 
-**1. Download and run setup**
+phinder needs two things: the reference **databases** (downloaded once) and a way
+to **provision the tools** (a `-profile` — containers or conda).
+
+**1. Download the databases**
 
 ```bash
-curl -O https://raw.githubusercontent.com/andrewcbudge/phinder/main/setup.sh
-bash setup.sh
+curl -O https://raw.githubusercontent.com/andrewbudge/phinder/main/setup.sh
+bash setup.sh --skip-envs        # databases only → ~/.phinder_dbs
 ```
 
-This creates pinned conda environments (`genomad_phinder`, `checkv_phinder`,
-`pharokka_phinder`) and downloads all required databases to `~/.phinder_dbs`.
-The exact run command is printed at the end.
-
-To also set up PhaBOX (optional):
-```bash
-bash setup.sh --with-phabox2
-```
+Drop `--skip-envs` to *also* build pinned conda environments (`genomad_phinder`,
+`checkv_phinder`, `pharokka_phinder`) — only needed for the conda profile below.
+Add `--with-phabox2` to set up the optional PhaBOX step.
 
 **2. Run**
 
+With **Docker** — pinned images, nothing to build (recommended):
+
 ```bash
-nextflow run andrewcbudge/phinder \
+nextflow run andrewbudge/phinder \
+    --input contigs.fasta \
+    --genomad_db  ~/.phinder_dbs/genomad_db \
+    --checkv_db   ~/.phinder_dbs/checkv_db \
+    --pharokka_db ~/.phinder_dbs/pharokka_db \
+    -profile docker
+```
+
+With **conda** — uses the envs built by `setup.sh` (run it without `--skip-envs`):
+
+```bash
+nextflow run andrewbudge/phinder \
     --input contigs.fasta \
     --genomad_db  ~/.phinder_dbs/genomad_db \
     --checkv_db   ~/.phinder_dbs/checkv_db \
@@ -59,7 +75,36 @@ nextflow run andrewcbudge/phinder \
     -profile conda
 ```
 
-Use `-resume` on reruns to skip completed steps.
+Use `-resume` on reruns to skip completed steps. For HPC / Singularity / Apptainer,
+see [Execution profiles](#execution-profiles).
+
+> **Reproducible runs:** pin a released version with `-r`, e.g.
+> `nextflow run andrewbudge/phinder -r v0.2.0 ...`. Without `-r`, Nextflow tracks
+> the default branch (`main`), which moves. Pin `-r`, record the DB versions from
+> `DB_MANIFEST.tsv`, and you can reproduce a run exactly.
+
+---
+
+## Verify your install
+
+Before running on real data, confirm Nextflow and your tool profile are wired up
+correctly — **no databases required**. This runs the whole pipeline on a tiny
+bundled dataset in *stub* mode, where every step emits placeholder outputs in
+seconds:
+
+```bash
+nextflow run andrewbudge/phinder -profile test -stub-run
+```
+
+A `[SUCCESS]` line with all 8 processes completed means your setup is good. To
+also check that your engine pulls images / builds envs, add it to the profile:
+
+```bash
+nextflow run andrewbudge/phinder -profile test,docker -stub-run   # or test,conda
+```
+
+This is the same check phinder's [CI](https://github.com/andrewbudge/phinder/actions/workflows/ci.yml)
+runs on every change.
 
 ---
 
@@ -96,11 +141,17 @@ results/
 │   └── candidate_phages.fna       candidate phage sequences
 ├── pharokka/
 │   └── output/                    per-contig annotation files
-└── phabox/                        (if --phabox2_env provided)
-    ├── end_to_end/                 taxonomy + lifestyle + host predictions
-    ├── votu/                       AAI-based vOTU clusters
-    └── tree/                       phylogenetic tree (terl + portal markers)
+├── phabox/                        (if --phabox2_env provided)
+│   ├── end_to_end/                 taxonomy + lifestyle + host predictions
+│   ├── votu/                       AAI-based vOTU clusters
+│   └── tree/                       phylogenetic tree (terl + portal markers)
+└── pipeline_info/
+    └── versions.yml               tool versions used in this run
 ```
+
+`pipeline_info/versions.yml` records the version of every tool the run
+invoked — pair it with the database `DB_MANIFEST.tsv` to fully describe a run
+when reporting results.
 
 ---
 
@@ -110,14 +161,19 @@ results/
 |-----------|---------|-------------|
 | `--input` | required | Combined contig FASTA (.fa or .fa.gz) |
 | `--outdir` | `results` | Output directory |
-| `--threads` | `8` | Threads per process |
+| `--cpu_fraction` | `0.5` | Fraction of detected CPU cores to use (`1.0` = all) |
+| `--mem_fraction` | `0.5` | Fraction of detected RAM to use (`1.0` = all) |
+| `--max_cpus` | unset | Exact core budget; overrides `--cpu_fraction` |
+| `--max_memory` | unset | Exact memory budget, e.g. `'64.GB'`; overrides `--mem_fraction` |
+| `--avail_cpus` | auto-detected | Override detected core count (if auto-detection is wrong) |
+| `--avail_mem` | auto-detected | Override detected RAM in bytes (if auto-detection is wrong) |
 | `--genomad_db` | required | Path to geNomad database |
 | `--checkv_db` | required | Path to CheckV database |
 | `--pharokka_db` | required | Path to Pharokka database |
 | `--phabox_db` | required if `--phabox2_env` set | Path to PhaBOX database |
-| `--genomad_env` | builds from bioconda | Path to existing geNomad conda env |
-| `--checkv_env` | builds from bioconda | Path to existing CheckV conda env |
-| `--pharokka_env` | builds from bioconda | Path to existing Pharokka conda env |
+| `--genomad_env` | builds from `envs/genomad.yml` | Path to existing geNomad conda env |
+| `--checkv_env` | builds from `envs/checkv.yml` | Path to existing CheckV conda env |
+| `--pharokka_env` | builds from `envs/pharokka.yml` | Path to existing Pharokka conda env |
 | `--phabox2_env` | unset (PhaBOX skipped) | Path to existing phabox2 conda env |
 | `--min_provirus_score` | `0.9` | geNomad Provirus minimum virus_score |
 | `--checkv_quality_keep` | `High-quality,Complete` | Comma-separated CheckV quality tiers to keep |
@@ -145,12 +201,92 @@ results/
 
 ---
 
-## Running on HPC
+## Execution profiles
 
-Add `-profile slurm` to submit processes as SLURM jobs:
+Pick how tools are provisioned with `-profile`. Profiles are composable
+(comma-separated):
+
+| Profile | Tools provided by | Use when |
+|---------|-------------------|----------|
+| `conda` | conda envs built from `envs/*.yml` | local conda/mamba install |
+| `mamba` | same, resolved with mamba | faster conda solves |
+| `docker` | pinned biocontainer images | laptop / workstation |
+| `singularity` | same images, via Singularity | HPC without root |
+| `apptainer` | same images, via Apptainer | HPC without root |
+| `slurm` | (executor only) | submit processes as SLURM jobs |
+
+Containers pull pinned, frozen tool images — no conda solve, identical on every
+machine. The reference **databases are still downloaded separately** (via
+`setup.sh`) regardless of profile, and passed with the `--*_db` flags; Nextflow
+mounts them into the container automatically.
 
 ```bash
-nextflow run andrewcbudge/phinder ... -profile conda,slurm
+# Laptop, with Docker
+nextflow run andrewbudge/phinder --input contigs.fasta \
+    --genomad_db ... --checkv_db ... --pharokka_db ... \
+    -profile docker
+
+# HPC, Singularity images submitted as SLURM jobs
+nextflow run andrewbudge/phinder ... -profile singularity,slurm
+```
+
+> **PhaBOX** (optional) currently has no container image and runs via conda only.
+> Combine `-profile docker` with `--phabox2_env <env>` if you need it, or omit
+> PhaBOX under the container profiles.
+
+---
+
+## Performance & resources
+
+**By default phinder uses half your machine** — half the detected CPU cores and
+half the RAM. This is deliberately conservative: it runs out of the box on a
+laptop or a small VM without ever failing with *"process requirement exceeds
+available CPUs/memory"*, and it's polite on a shared login node. Work is split
+across three tiers (`process_low`/`medium`/`high`); the heavy steps (geNomad,
+CheckV) get the full budget, lighter steps get a share.
+
+**To go faster, give it more** — two ways:
+
+```bash
+# By fraction — run on a bigger machine and use more of it
+nextflow run andrewbudge/phinder ... --cpu_fraction 1.0 --mem_fraction 1.0   # the whole machine
+nextflow run andrewbudge/phinder ... --cpu_fraction 0.75 --mem_fraction 0.75 # leave some headroom
+
+# By exact amount — ultimate control (overrides the fractions)
+nextflow run andrewbudge/phinder ... --max_cpus 32 --max_memory '128.GB'
+```
+
+`--cpu_fraction`/`--max_cpus` and `--mem_fraction`/`--max_memory` are
+independent — e.g. cap memory at an exact `--max_memory '64.GB'` while letting
+cores stay at the default fraction. The chosen budget is what the heavy steps
+(geNomad, CheckV) get; lighter steps take a share.
+
+If auto-detection guesses wrong (e.g. inside a container with cgroup limits, or
+on a scheduler that hides the true node size), set the machine size explicitly
+with `--avail_cpus N` and `--avail_mem <bytes>`. For per-step control, drop in a
+`-c custom.config` overriding the `process_low/medium/high` labels.
+
+> geNomad memory scales with `--genomad_splits` (default `20`). If you hit a
+> memory wall, raise it; if you have RAM to spare and want speed, lower it.
+
+---
+
+## Running on HPC
+
+Add `-profile slurm` to submit processes as SLURM jobs (compose with a tool
+profile, e.g. `conda` or `singularity`):
+
+```bash
+nextflow run andrewbudge/phinder ... -profile singularity,slurm
+```
+
+On a scheduler each process is sized by its `process_low/medium/high` label.
+Tune them for your partition with a `-c custom.config` — for example:
+
+```groovy
+process {
+    withLabel: process_high { cpus = 32; memory = 128.GB; time = '24h' }
+}
 ```
 
 ---
@@ -165,6 +301,29 @@ bash setup.sh [--db-dir DIR] [--skip-envs] [--skip-dbs] [--with-phabox2]
   --skip-dbs        Skip database downloads
   --with-phabox2    Also install the phabox2 conda environment
 ```
+
+### Database provenance
+
+phinder does not pin database versions — it orchestrates the underlying tools
+and lets each one fetch its current database. That keeps you on the versions the
+tool authors recommend, which is what most analyses want. If you need a specific
+version instead, download it yourself and point the matching `--*_db` flag at it.
+
+So that a run can still be described after the fact, `setup.sh` writes a
+`DB_MANIFEST.tsv` into the database directory recording each database's version,
+the tool version that fetched it, its source, and the date:
+
+```
+database  db_version  tool_version  source                     recorded_utc
+genomad   1.9         1.11.2        genomad download-database  2026-06-07T22:23:38Z
+checkv    1.5         1.0.3         checkv download_database   2026-06-07T22:23:38Z
+pharokka  1.8.0       1.8.2         install_databases.py       2026-06-07T22:23:38Z
+phabox    2.2         2.2           github.com/.../phabox_db_v2_2.zip  2026-06-07T22:23:38Z
+```
+
+Re-running `setup.sh` refreshes the entries for whatever databases are present,
+so the manifest always reflects what is on disk. Include it when reporting
+results or filing issues.
 
 ---
 

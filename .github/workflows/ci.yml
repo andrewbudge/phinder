@@ -1,0 +1,94 @@
+name: CI
+
+# Validates phinder's wiring and reproducibility scaffolding without needing
+# any databases: every process has a `stub:` block, so `-stub-run` exercises
+# the full DAG (channel plumbing, file staging) in seconds. The conda and
+# docker jobs additionally prove the pinned envs *solve* and the pinned
+# container images *pull* — the core v0.2.0 reproducibility guarantee.
+#
+# PhaBOX is intentionally not exercised here: the `test` profile leaves
+# `phabox2_env` unset, so those (optional) steps — and the unstable
+# phabox2==2.2 placeholder env — never run.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Pin Nextflow rather than raising the manifest floor. 26.04.1 is the version
+# phinder was validated against; bump deliberately, not implicitly.
+env:
+  NXF_VER: "26.04.1"
+
+jobs:
+  wiring:
+    name: Workflow wiring (stub, no engine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: nf-core/setup-nextflow@v2
+        with:
+          version: ${{ env.NXF_VER }}
+      - name: Stub run
+        # resourceLimits auto-caps cpus/memory to the runner, so no manual
+        # thread cap is needed (4-CPU runners are fine out of the box).
+        run: nextflow run . -profile test -stub-run
+
+  docker:
+    name: Containers pull & run (docker, stub)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: nf-core/setup-nextflow@v2
+        with:
+          version: ${{ env.NXF_VER }}
+      - name: Stub run under docker
+        # Pulls each pinned image and runs the stub inside it, proving the
+        # `container` directives are resolvable and runnable.
+        run: nextflow run . -profile test,docker -stub-run
+
+  conda:
+    name: Conda envs solve (stub)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # Login shell so `conda` is on PATH for the env builds Nextflow triggers.
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: nf-core/setup-nextflow@v2
+        with:
+          version: ${{ env.NXF_VER }}
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          # Miniforge → conda-forge only by default (no `defaults` channel, so
+          # no channel Terms-of-Service prompt to trip CI).
+          miniforge-version: latest
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          auto-activate-base: true
+      - name: Cache solved conda envs
+        uses: actions/cache@v4
+        with:
+          path: ~/.nextflow-conda-cache
+          # Re-solve only when an env file changes.
+          key: conda-${{ runner.os }}-${{ hashFiles('envs/*.yml') }}
+      - name: Stub run under conda
+        # Builds (and caches) every pinned env reached by the test DAG —
+        # genomad, checkv, pharokka, seqkit, rfilter. PhaBOX is not reached.
+        env:
+          NXF_CONDA_CACHEDIR: ~/.nextflow-conda-cache
+        run: nextflow run . -profile test,conda -stub-run
