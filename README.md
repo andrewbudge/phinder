@@ -78,6 +78,11 @@ nextflow run andrewbudge/phinder \
 Use `-resume` on reruns to skip completed steps. For HPC / Singularity / Apptainer,
 see [Execution profiles](#execution-profiles).
 
+> **Reproducible runs:** pin a released version with `-r`, e.g.
+> `nextflow run andrewbudge/phinder -r v0.2.0 ...`. Without `-r`, Nextflow tracks
+> the default branch (`main`), which moves. Pin `-r`, record the DB versions from
+> `DB_MANIFEST.tsv`, and you can reproduce a run exactly.
+
 ---
 
 ## Verify your install
