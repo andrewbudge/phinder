@@ -14,6 +14,7 @@ nextflow.enable.dsl = 2
 // ============================================================================
 
 process GENOMAD {
+    label 'process_high'
     conda params.genomad_env ?: "${projectDir}/envs/genomad.yml"
     container 'quay.io/biocontainers/genomad:1.11.2--pyhdfd78af_0'
     publishDir "${params.outdir}/genomad", mode: 'copy'
@@ -52,6 +53,7 @@ END_VERSIONS
 }
 
 process FILTER_GENOMAD {
+    label 'process_low'
     conda "${projectDir}/envs/rfilter.yml"
     container 'rocker/tidyverse:4.3.3'
     publishDir "${params.outdir}/genomad", mode: 'copy'
@@ -90,6 +92,7 @@ END_VERSIONS
 }
 
 process SUBSET_GENOMAD_FASTA {
+    label 'process_low'
     conda "${projectDir}/envs/seqkit.yml"
     container 'quay.io/biocontainers/seqkit:2.8.2--h9ee0642_1'
 
@@ -124,6 +127,7 @@ END_VERSIONS
 }
 
 process CHECKV {
+    label 'process_high'
     conda params.checkv_env ?: "${projectDir}/envs/checkv.yml"
     container 'quay.io/biocontainers/checkv:1.0.3--pyhdfd78af_0'
     publishDir "${params.outdir}/checkv", mode: 'copy'
@@ -164,6 +168,7 @@ END_VERSIONS
 }
 
 process FILTER_CHECKV {
+    label 'process_low'
     conda "${projectDir}/envs/rfilter.yml"
     container 'rocker/tidyverse:4.3.3'
     publishDir "${params.outdir}/checkv", mode: 'copy'
@@ -207,6 +212,7 @@ END_VERSIONS
 }
 
 process CLEAN_PROVIRUS_HEADERS {
+    label 'process_low'
     // CheckV renames trimmed proviruses with a `_1 start-end/total` suffix,
     // which breaks seqkit ID matching. Strip the suffix back to a stable form.
     conda "${projectDir}/envs/seqkit.yml"
@@ -242,6 +248,7 @@ END_VERSIONS
 }
 
 process BUILD_CANDIDATES {
+    label 'process_low'
     conda "${projectDir}/envs/seqkit.yml"
     container 'quay.io/biocontainers/seqkit:2.8.2--h9ee0642_1'
     publishDir "${params.outdir}/candidates", mode: 'copy'
@@ -295,6 +302,7 @@ END_VERSIONS
 }
 
 process PHAROKKA {
+    label 'process_medium'
     conda params.pharokka_env ?: "${projectDir}/envs/pharokka.yml"
     container 'quay.io/biocontainers/pharokka:1.8.2--pyhdfd78af_0'
     publishDir "${params.outdir}/pharokka", mode: 'copy'
@@ -341,6 +349,7 @@ END_VERSIONS
 // docker/singularity these steps would need an image; build one once a 2.2+
 // biocontainer is published (see envs/phabox2.yml). The conda path is unaffected.
 process PHABOX_END_TO_END {
+    label 'process_medium'
     conda params.phabox2_env ?: "${projectDir}/envs/phabox2.yml"
     publishDir "${params.outdir}/phabox/end_to_end", mode: 'copy'
 
@@ -379,6 +388,7 @@ END_VERSIONS
 }
 
 process PHABOX_VOTU {
+    label 'process_medium'
     conda params.phabox2_env ?: "${projectDir}/envs/phabox2.yml"
     publishDir "${params.outdir}/phabox/votu", mode: 'copy'
 
@@ -416,6 +426,7 @@ END_VERSIONS
 }
 
 process PHABOX_TREE {
+    label 'process_medium'
     conda params.phabox2_env ?: "${projectDir}/envs/phabox2.yml"
     publishDir "${params.outdir}/phabox/tree", mode: 'copy'
 

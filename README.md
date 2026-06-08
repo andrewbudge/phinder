@@ -156,7 +156,12 @@ when reporting results.
 |-----------|---------|-------------|
 | `--input` | required | Combined contig FASTA (.fa or .fa.gz) |
 | `--outdir` | `results` | Output directory |
-| `--threads` | `8` | Threads per process |
+| `--cpu_fraction` | `0.5` | Fraction of detected CPU cores to use (`1.0` = all) |
+| `--mem_fraction` | `0.5` | Fraction of detected RAM to use (`1.0` = all) |
+| `--max_cpus` | unset | Exact core budget; overrides `--cpu_fraction` |
+| `--max_memory` | unset | Exact memory budget, e.g. `'64.GB'`; overrides `--mem_fraction` |
+| `--avail_cpus` | auto-detected | Override detected core count (if auto-detection is wrong) |
+| `--avail_mem` | auto-detected | Override detected RAM in bytes (if auto-detection is wrong) |
 | `--genomad_db` | required | Path to geNomad database |
 | `--checkv_db` | required | Path to CheckV database |
 | `--pharokka_db` | required | Path to Pharokka database |
@@ -226,6 +231,41 @@ nextflow run andrewbudge/phinder ... -profile singularity,slurm
 
 ---
 
+## Performance & resources
+
+**By default phinder uses half your machine** — half the detected CPU cores and
+half the RAM. This is deliberately conservative: it runs out of the box on a
+laptop or a small VM without ever failing with *"process requirement exceeds
+available CPUs/memory"*, and it's polite on a shared login node. Work is split
+across three tiers (`process_low`/`medium`/`high`); the heavy steps (geNomad,
+CheckV) get the full budget, lighter steps get a share.
+
+**To go faster, give it more** — two ways:
+
+```bash
+# By fraction — run on a bigger machine and use more of it
+nextflow run andrewbudge/phinder ... --cpu_fraction 1.0 --mem_fraction 1.0   # the whole machine
+nextflow run andrewbudge/phinder ... --cpu_fraction 0.75 --mem_fraction 0.75 # leave some headroom
+
+# By exact amount — ultimate control (overrides the fractions)
+nextflow run andrewbudge/phinder ... --max_cpus 32 --max_memory '128.GB'
+```
+
+`--cpu_fraction`/`--max_cpus` and `--mem_fraction`/`--max_memory` are
+independent — e.g. cap memory at an exact `--max_memory '64.GB'` while letting
+cores stay at the default fraction. The chosen budget is what the heavy steps
+(geNomad, CheckV) get; lighter steps take a share.
+
+If auto-detection guesses wrong (e.g. inside a container with cgroup limits, or
+on a scheduler that hides the true node size), set the machine size explicitly
+with `--avail_cpus N` and `--avail_mem <bytes>`. For per-step control, drop in a
+`-c custom.config` overriding the `process_low/medium/high` labels.
+
+> geNomad memory scales with `--genomad_splits` (default `20`). If you hit a
+> memory wall, raise it; if you have RAM to spare and want speed, lower it.
+
+---
+
 ## Running on HPC
 
 Add `-profile slurm` to submit processes as SLURM jobs (compose with a tool
@@ -233,6 +273,15 @@ profile, e.g. `conda` or `singularity`):
 
 ```bash
 nextflow run andrewbudge/phinder ... -profile singularity,slurm
+```
+
+On a scheduler each process is sized by its `process_low/medium/high` label.
+Tune them for your partition with a `-c custom.config` — for example:
+
+```groovy
+process {
+    withLabel: process_high { cpus = 32; memory = 128.GB; time = '24h' }
+}
 ```
 
 ---
